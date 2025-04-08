@@ -1,0 +1,8 @@
+rootProject.name = 'JavaProject'
+include 'Model'
+include 'Client'
+include 'Server'
+include 'Persistence'
+include 'Networking'
+include 'Services'
+
