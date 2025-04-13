@@ -198,7 +198,6 @@ public class ServicesJsonProxy implements IServices {
             }
         }
 
-        System.out.println("New Registration received: " + newRegistration);
     }
 
     private boolean isNewRegistration(String data) {
@@ -210,7 +209,9 @@ public class ServicesJsonProxy implements IServices {
             while (!finished) {
                 try {
                     String responseLine = input.readLine();
-                    System.out.println("Response received: " + responseLine);
+
+                    // TODO remove after fix
+                    //System.out.println("Response received: " + responseLine);
 
                     JsonResponse response = gsonFormatter.fromJson(responseLine, JsonResponse.class);
 

@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation project(':Services')
+    implementation project(':Persistence')
     implementation project(':Model')
     implementation project(':Networking')
     testImplementation platform('org.junit:junit-bom:5.10.0')

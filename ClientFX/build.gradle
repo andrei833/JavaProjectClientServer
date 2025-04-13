@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+    id 'org.openjfx.javafxplugin' version '0.0.13'
+    id 'application'
+}
+
+group 'JavaProject'
+version '1.0'
+
+
+repositories {
+    mavenCentral()
+}
+
+javafx {
+    version = '21'
+    modules = ['javafx.controls', 'javafx.fxml']
+}
+
+
+
+dependencies {
+    implementation project(':Services')
+    implementation project(':Model')
+    implementation project(':Persistence')
+    implementation project(':Networking')
+    implementation project(':Client')
+
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.23.1'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.23.1'
+}
+
+
+application {
+    mainClass = 'ui.ClientApplication'
+}

@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
 
-public class StartJsonClient {
+public class StartJsonClient2 {
     private static final int defaultChatPort = 55555;
     private static final String defaultServer = "localhost";
 
@@ -46,7 +46,6 @@ public class StartJsonClient {
 
             IObserver observer = new ClientObserver();
             server.login(randomString, observer);
-            server.createRegistration("Jane Doe", 30, 1);
 
 
         } catch (ServiceException e) {

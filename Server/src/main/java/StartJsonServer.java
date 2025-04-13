@@ -37,7 +37,9 @@ public class StartJsonServer {
         }
 
         System.out.println("Starting server on port: " + chatServerPort);
+
         AbstractServer server = new JsonConcurrentServer(chatServerPort, service);
+
         try {
             server.start();
         } catch (ServerException e) {

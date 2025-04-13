@@ -6,6 +6,9 @@ public class RaceCountDTO {
     private Race race;
     private int count;
 
+    public RaceCountDTO() {
+    }
+
     public Race getRace() {
         return race;
     }

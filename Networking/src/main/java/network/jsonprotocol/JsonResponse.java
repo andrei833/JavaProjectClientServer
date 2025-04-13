@@ -38,4 +38,15 @@ public class JsonResponse {
     public void setType(String type) {
         this.type = type;
     }
+
+
+    @Override
+    public String toString() {
+        return "JsonResponse{" +
+                "status='" + status + '\'' +
+                ", data='" + data + '\'' +
+                ", type='" + type + '\'' +
+                '}';
+    }
+
 }

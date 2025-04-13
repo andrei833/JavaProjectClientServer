@@ -5,6 +5,7 @@ import model.Race;
 import model.Registration;
 import network.dto.RaceCountDTO;
 import network.dto.RegistrationDTO;
+import network.utils.JsonConcurrentServer;
 import services.IObserver;
 import services.IServices;
 import services.ServiceException;
@@ -22,9 +23,12 @@ public class ClientJsonWorker implements Runnable, IObserver {
   private PrintWriter output;
   private final Gson gsonFormatter;
   private volatile boolean connected;
+  private final JsonConcurrentServer jsonConcurrentServer;  // Add this reference
 
-  public ClientJsonWorker(IServices server, Socket connection) {
+
+  public ClientJsonWorker(IServices server, JsonConcurrentServer jsonConcurrentServer, Socket connection) {
     this.server = server;
+    this.jsonConcurrentServer = jsonConcurrentServer;  // Initialize the reference
     this.connection = connection;
     gsonFormatter = new Gson();
     try {
@@ -84,6 +88,8 @@ public class ClientJsonWorker implements Runnable, IObserver {
         case "CREATE_REGISTRATION":
           RegistrationDTO registration = gsonFormatter.fromJson(request.getData(), RegistrationDTO.class);
           server.createRegistration(registration.getName(), registration.getAge(), registration.getRaceId());
+          Registration newRegistration = new Registration();
+          jsonConcurrentServer.broadcastNewRegistration(newRegistration);
           return new JsonResponse("OK", gsonFormatter.toJson(registration), "NEW_REGISTRATION");
 
         case "GET_PARTICIPANTS_FOR_RACE":
@@ -106,6 +112,11 @@ public class ClientJsonWorker implements Runnable, IObserver {
     } catch (Exception e) {
       return new JsonResponse("ERROR", "Unexpected error: " + e.getMessage(), "UNEXPECTED_ERROR");
     }
+  }
+
+  public void sendNotification(Registration reg) {
+    JsonResponse response = new JsonResponse("OK", gsonFormatter.toJson(reg), "NEW_REGISTRATION");
+    sendResponse(response);
   }
 
   private void sendResponse(JsonResponse response) {

@@ -5,4 +5,5 @@ include 'Server'
 include 'Persistence'
 include 'Networking'
 include 'Services'
+include 'ClientFX'
 
