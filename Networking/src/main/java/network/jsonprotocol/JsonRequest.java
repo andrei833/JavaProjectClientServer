@@ -1,22 +1,23 @@
 package network.jsonprotocol;
 
+import network.types.RequestType;
+
 public class JsonRequest {
-    private String type;
+    private RequestType type;
     private String data;
 
-    public JsonRequest() {
-    }
+    public JsonRequest() {}
 
-    public JsonRequest(String type, String data) {
+    public JsonRequest(RequestType type, String data) {
         this.type = type;
         this.data = data;
     }
 
-    public String getType() {
+    public RequestType getType() {
         return type;
     }
 
-    public void setType(String type) {
+    public void setType(RequestType type) {
         this.type = type;
     }
 
@@ -28,12 +29,12 @@ public class JsonRequest {
         this.data = data;
     }
 
-
     @Override
     public String toString() {
         return "JsonRequest{" +
-                "type='" + type + '\'' +
+                "type=" + type +
                 ", data='" + data + '\'' +
                 '}';
     }
 }
+

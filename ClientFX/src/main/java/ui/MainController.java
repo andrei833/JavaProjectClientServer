@@ -8,18 +8,19 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import model.Participant;
 import model.Race;
+import model.Registration;
 import network.jsonprotocol.ServicesJsonProxy;
-import observer.ClientObserver;
-import service.LocalService;
-import services.ServiceException;
+import service.ClientService;
+import services.IObserver;
 import services.IServices;
+import services.ServiceException;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
-public class MainController {
+public class MainController implements IObserver {
 
     @FXML
     private TableView<Race> raceTableView;
@@ -29,7 +30,6 @@ public class MainController {
     private TableColumn<Race, Integer> participantColumn;
     @FXML
     private ListView<String> participantListView;
-
     @FXML
     private TextField participantNameField;
     @FXML
@@ -38,24 +38,19 @@ public class MainController {
     private Button registerButton;
 
     private IServices server;
-    private LocalService localService; // Local service handling local data
-    private ServicesJsonProxy proxyService; // Proxy service handling server communication
+    private ClientService localService;
 
-    private ObservableList<Race> races;
-    private ObservableList<Participant> participants;
+    private Race selectedRace = null;
 
     private static final int defaultChatPort = 55555;
     private static final String defaultServer = "localhost";
 
     @FXML
     public void initialize() {
-        System.out.println("In start");
-
-        // Load client properties for server communication
         Properties clientProps = new Properties();
         try {
             clientProps.load(MainController.class.getResourceAsStream("/client.properties"));
-            System.out.println("Client properties set.");
+            System.out.println("Client properties set. ");
             clientProps.list(System.out);
         } catch (IOException e) {
             System.err.println("Cannot find client.properties " + e);
@@ -71,77 +66,72 @@ public class MainController {
             System.err.println("Wrong port number " + ex.getMessage());
             System.out.println("Using default port: " + defaultChatPort);
         }
-        System.out.println("Using server IP " + serverIP);
-        System.out.println("Using server port " + serverPort);
 
-        // Initialize the proxy service (this will communicate with the server)
-        proxyService = new ServicesJsonProxy(serverIP, serverPort);
-        server = proxyService;
-        // Initialize the local service (this handles local data operations)
-        localService = new LocalService();
+        server = new ServicesJsonProxy(serverIP, serverPort);
 
-        // Login to the server
         try {
-            String randomString = String.valueOf((int) (Math.random() * 100000) % 100000);
-            proxyService.initializeConnection();
-            server.login(randomString, new ClientObserver()); // Register as observer
-        } catch (ServiceException e) {
-            System.out.println("Connection failed: " + e.getMessage());
-        }
+            // Generate a random client ID
+            String clientId = String.valueOf((int) (Math.random() * 100000));
+            server.login(clientId, this);
 
-        raceTableView.getSelectionModel().selectedItemProperty().addListener(
-                (obs, oldSelection, newSelection) -> {
-                    if (newSelection != null) {
-                        loadParticipantsForRace(newSelection);
+            // Initial data load from server
+            List<Race> races = server.getRaces();
+            List<Participant> participants = server.getParticipants();
+            List<Registration> registrations = server.getRegistrations();
+
+            // Initialize local service with server data
+            localService = new ClientService(races, participants, registrations);
+
+            setupRaceTable();
+
+            // Set listener for selection in race table
+            raceTableView.getSelectionModel().selectedItemProperty().addListener(
+                    (obs, oldSelection, newSelection) -> {
+                        if (newSelection != null) {
+                            loadParticipantsForRace(newSelection);
+                        }
                     }
-                });
+            );
 
-        // Setup table and button
-        setupRaceTable();
-        registerButton.setOnAction(event -> handleRegistration());
+            // Register button action
+            registerButton.setOnAction(event -> registerParticipant());
+            update();
+
+        } catch (ServiceException e) {
+            e.printStackTrace();
+            showAlert("Error", "Could not connect to server", e.getMessage());
+        }
     }
 
     private void setupRaceTable() {
+        Map<Race, Integer> racesWithParticipantCount = localService.getAllRacesWithParticipantCount();
+
         raceTableView.getItems().clear();
-
-        // Get races using local service
-        List<Race> raceList = localService.getAllRacesWithParticipantCount().keySet().stream().collect(Collectors.toList());
-        races = FXCollections.observableArrayList(raceList);
-
         raceColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getStyle()));
-        participantColumn.setCellValueFactory(cellData -> new SimpleIntegerProperty(getParticipantCount(cellData.getValue())).asObject());
-        raceTableView.setItems(races);
-    }
+        participantColumn.setCellValueFactory(cellData ->
+                new SimpleIntegerProperty(racesWithParticipantCount.getOrDefault(cellData.getValue(), 0)).asObject()
+        );
 
-    private int getParticipantCount(Race race) {
-        // Count participants for a specific race using local service
-        return localService.getAllParticipantsFromSpecificRace(race).size();
+        raceTableView.getItems().addAll(racesWithParticipantCount.keySet());
     }
 
     private void loadParticipantsForRace(Race race) {
-        participantListView.getItems().clear();
+        List<Participant> participants = localService.getAllParticipantsFromSpecificRace(race);
         ObservableList<String> participantStrings = FXCollections.observableArrayList();
 
-        // Load participants using local service
-        List<Participant> participantList = localService.getAllParticipantsFromSpecificRace(race);
-        for (Participant p : participantList) {
+        for (Participant p : participants) {
             participantStrings.add(p.getName() + " (ID: " + p.getId() + ")");
         }
+
         participantListView.setItems(participantStrings);
     }
 
-    private void handleRegistration() {
-        Race selectedRace = raceTableView.getSelectionModel().getSelectedItem();
-        if (selectedRace == null) {
-            showAlert("Error", "No race selected", "Please select a race first");
-            return;
-        }
-
+    private void registerParticipant() {
         String name = participantNameField.getText().trim();
         String ageText = participantAgeField.getText().trim();
 
         if (name.isEmpty() || ageText.isEmpty()) {
-            showAlert("Error", "Missing information", "Please enter both name and age");
+            showAlert("Input Error", "Missing Data", "Please fill in both name and age fields.");
             return;
         }
 
@@ -149,25 +139,71 @@ public class MainController {
         try {
             age = Integer.parseInt(ageText);
         } catch (NumberFormatException e) {
-            showAlert("Error", "Invalid age", "Age must be a number");
+            showAlert("Input Error", "Invalid Age", "Age must be a number.");
             return;
         }
 
-        // Register participant locally
-        localService.createRegistration(name, age, selectedRace.getId());
-
-        participantNameField.clear();
-        participantAgeField.clear();
-        loadParticipantsForRace(selectedRace);
-        setupRaceTable();
-        try {
-            server.createRegistration(name,age,selectedRace.getId());
-        } catch (ServiceException e) {
-            throw new RuntimeException(e);
+        Race selectedRace = raceTableView.getSelectionModel().getSelectedItem();
+        if (selectedRace == null) {
+            showAlert("Selection Error", "No Race Selected", "Please select a race.");
+            return;
         }
-        showAlert("Success", "Registration created", "Participant " + name + " registered for " + selectedRace.getStyle());
 
+        // Send the registration request to the server
+        try {
+            server.createRegistration(name, age, selectedRace.getId());
+        } catch (ServiceException e) {
+            showAlert("Error", "Registration Failed", e.getMessage());
+        }
     }
+
+    @Override
+    public void update() {
+        javafx.application.Platform.runLater(() -> {
+            // Declare the lists for races, participants, and registrations
+            List<Race> races = null;
+            List<Participant> participants = null;
+            List<Registration> registrations = null;
+
+            // Fetch the latest data from the server
+            try {
+                races = server.getRaces();
+                participants = server.getParticipants();
+                registrations = server.getRegistrations();
+            } catch (ServiceException e) {
+                throw new RuntimeException(e);
+            }
+
+            // Update the local service with the new data
+            localService.updateData(races, participants, registrations);
+
+            // Store the previously selected race (if any) before updating the table
+            Race currentSelection = raceTableView.getSelectionModel().getSelectedItem();
+            if (currentSelection != null) {
+                selectedRace = currentSelection; // Save the selected race
+            }
+
+            // Refresh the race table with the updated data
+            setupRaceTable();
+
+            // After the table is refreshed, check if the selected race still exists in the new list by ID
+            if (selectedRace != null) {
+                // Check if any race in the updated list has the same ID as the selected race
+                Race raceById = races.stream()
+                        .filter(race -> race.getId() == selectedRace.getId())
+                        .findFirst()
+                        .orElse(null);
+
+                // If the race exists by ID, reselect it in the table
+                if (raceById != null) {
+                    raceTableView.getSelectionModel().select(raceById);
+                    loadParticipantsForRace(raceById);  // Reload the participants for the selected race
+                }
+            }
+        });
+    }
+
+
 
     private void showAlert(String title, String header, String content) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -175,9 +211,5 @@ public class MainController {
         alert.setHeaderText(header);
         alert.setContentText(content);
         alert.showAndWait();
-    }
-
-    public void setServer(IServices server) {
-        this.server = server;
     }
 }

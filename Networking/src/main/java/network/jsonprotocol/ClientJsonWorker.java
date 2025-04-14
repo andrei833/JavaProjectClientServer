@@ -1,36 +1,30 @@
 package network.jsonprotocol;
 
 import com.google.gson.Gson;
-import model.Race;
-import model.Registration;
-import network.dto.RaceCountDTO;
-import network.dto.RegistrationDTO;
-import network.utils.JsonConcurrentServer;
+import network.dto.*;
 import services.IObserver;
 import services.IServices;
 import services.ServiceException;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Map;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
+
 
 public class ClientJsonWorker implements Runnable, IObserver {
   private final IServices server;
   private final Socket connection;
   private BufferedReader input;
   private PrintWriter output;
-  private final Gson gsonFormatter;
+  private final Gson gson;
   private volatile boolean connected;
-  private final JsonConcurrentServer jsonConcurrentServer;  // Add this reference
 
 
-  public ClientJsonWorker(IServices server, JsonConcurrentServer jsonConcurrentServer, Socket connection) {
+  public ClientJsonWorker(IServices server, Socket connection) {
     this.server = server;
-    this.jsonConcurrentServer = jsonConcurrentServer;  // Initialize the reference
     this.connection = connection;
-    gsonFormatter = new Gson();
+    gson = new Gson();
     try {
       output = new PrintWriter(connection.getOutputStream(), true);
       input = new BufferedReader(new InputStreamReader(connection.getInputStream()));
@@ -40,12 +34,67 @@ public class ClientJsonWorker implements Runnable, IObserver {
     }
   }
 
+  private JsonResponse handleRequest(JsonRequest request) {
+    try {
+      switch (request.getType()) {
+        case LOGIN:
+          String clientId = gson.fromJson(request.getData(), String.class);
+          server.login(clientId, this);
+          return JsonProtocolUtils.createLoginResponse("OK", "Login successful");
+
+        case LOGOUT:
+          clientId = gson.fromJson(request.getData(), String.class);
+          server.logout(clientId, this);
+          return JsonProtocolUtils.createLogoutResponse("OK", "Logout successful");
+
+        case CREATE_REGISTRATION:
+          CreateRegistrationDTO regDto = gson.fromJson(request.getData(), CreateRegistrationDTO.class);
+          server.createRegistration(regDto.getParticipantName(),regDto.getParticipantAge(),regDto.getRegistrationId());
+          return JsonProtocolUtils.createCreateRegistrationResponse("OK","Registration Created Succesfully not checking if the user is in the race already");
+
+        case GET_RACES:
+          ArrayList<RaceDTO> raceDTOS = server.getRaces().stream().map(i ->{
+              return new RaceDTO(i.getId(),i.getDistance(),i.getStyle(),i.getNumberOfParticipants());
+          }).collect(Collectors.toCollection(ArrayList::new));
+          ListDTO<RaceDTO> RaceDtoList = new ListDTO<RaceDTO>(raceDTOS);
+          return JsonProtocolUtils.createListResponse("OK", gson.toJson(RaceDtoList));
+
+        case GET_PARTICIPANTS:
+          ArrayList<ParticipantDTO> participantDTOS = server.getParticipants().stream().map(p -> {
+            return new ParticipantDTO(p.getId(), p.getName(), p.getAge());
+          }).collect(Collectors.toCollection(ArrayList::new));
+          ListDTO<ParticipantDTO> participantDtoList = new ListDTO<>(participantDTOS);
+          return JsonProtocolUtils.createListResponse("OK", gson.toJson(participantDtoList));
+
+        case GET_REGISTRATIONS:
+          ArrayList<RegistrationDTO> registrationDTOS = server.getRegistrations().stream().map(r -> {
+            return new RegistrationDTO(r.getId(), r.getParticipantId(), r.getRaceId());
+          }).collect(Collectors.toCollection(ArrayList::new));
+          ListDTO<RegistrationDTO> registrationDtoList = new ListDTO<>(registrationDTOS);
+          return JsonProtocolUtils.createListResponse("OK", gson.toJson(registrationDtoList));
+
+        default:
+          return JsonProtocolUtils.createErrorResponse("Unknown request type");
+      }
+    } catch (ServiceException e) {
+      return JsonProtocolUtils.createErrorResponse("Service error " + e.getMessage());
+    } catch (Exception e) {
+      return JsonProtocolUtils.createErrorResponse("Unexpected error: " + e.getMessage());
+    }
+  }
+
+  @Override
+  public void update(){
+    JsonResponse response = JsonProtocolUtils.createUpdateResponse("OK", "UPDATE BRO UPDATE");
+    sendResponse(response);
+  }
+
   public void run() {
     while (connected) {
       try {
         String requestLine = input.readLine();
         if (requestLine != null) {
-          JsonRequest request = gsonFormatter.fromJson(requestLine, JsonRequest.class);
+          JsonRequest request = gson.fromJson(requestLine, JsonRequest.class);
           JsonResponse response = handleRequest(request);
           if (response != null) {
             sendResponse(response);
@@ -72,63 +121,10 @@ public class ClientJsonWorker implements Runnable, IObserver {
     }
   }
 
-  private JsonResponse handleRequest(JsonRequest request) {
-    try {
-      switch (request.getType()) {
-        case "LOGIN":
-          String clientId = request.getData();
-          server.login(clientId, this);  // Login: register observer
-          return new JsonResponse("OK", "Login successful", "LOGIN_RESPONSE");
-
-        case "LOGOUT":
-          clientId = request.getData();
-          server.logout(clientId, this);  // Logout: unregister observer
-          return new JsonResponse("OK", "Logout successful", "LOGOUT_RESPONSE");
-
-        case "CREATE_REGISTRATION":
-          RegistrationDTO registration = gsonFormatter.fromJson(request.getData(), RegistrationDTO.class);
-          server.createRegistration(registration.getName(), registration.getAge(), registration.getRaceId());
-          Registration newRegistration = new Registration();
-          jsonConcurrentServer.broadcastNewRegistration(newRegistration);
-          return new JsonResponse("OK", gsonFormatter.toJson(registration), "NEW_REGISTRATION");
-
-        case "GET_PARTICIPANTS_FOR_RACE":
-          // TODO: Implement as needed
-          return new JsonResponse("ERROR", "Not implemented yet", "GET_PARTICIPANTS_FOR_RACE_RESPONSE");
-
-        case "GET_ALL_RACES":
-          Map<Race, Integer> raceMap = server.getAllRacesWithParticipantCount();
-          List<RaceCountDTO> raceList = raceMap.entrySet().stream()
-                  .map(entry -> new RaceCountDTO(entry.getKey(), entry.getValue()))
-                  .collect(Collectors.toList());
-          String raceMapJson = gsonFormatter.toJson(raceList);
-          return new JsonResponse("OK", raceMapJson, "GET_ALL_RACES_RESPONSE");
-
-        default:
-          return new JsonResponse("ERROR", "Unknown request type: " + request.getType(), "ERROR_RESPONSE");
-      }
-    } catch (ServiceException e) {
-      return new JsonResponse("ERROR", "Service error: " + e.getMessage(), "SERVICE_ERROR");
-    } catch (Exception e) {
-      return new JsonResponse("ERROR", "Unexpected error: " + e.getMessage(), "UNEXPECTED_ERROR");
-    }
-  }
-
-  public void sendNotification(Registration reg) {
-    JsonResponse response = new JsonResponse("OK", gsonFormatter.toJson(reg), "NEW_REGISTRATION");
-    sendResponse(response);
-  }
-
   private void sendResponse(JsonResponse response) {
-    String json = gsonFormatter.toJson(response);
+    String json = gson.toJson(response);
     output.println(json);
     output.flush();
   }
 
-  @Override
-  public void createdRegistration(Registration reg) {
-    // You can notify the client here if needed
-    JsonResponse response = new JsonResponse("OK", gsonFormatter.toJson(reg), "NEW_REGISTRATION");
-    sendResponse(response);
-  }
 }

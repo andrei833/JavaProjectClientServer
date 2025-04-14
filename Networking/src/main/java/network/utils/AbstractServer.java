@@ -20,7 +20,7 @@ public abstract class AbstractServer {
       while (true) {
         System.out.println("Waiting for clients ...");
         Socket client = server.accept();
-        System.out.println("Client connected ...");
+        System.out.println("Client connected from: " + client.getInetAddress() + ":" + client.getPort());
         processRequest(client);
       }
     } catch (IOException e) {

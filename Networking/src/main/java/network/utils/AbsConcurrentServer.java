@@ -17,5 +17,4 @@ public abstract class AbsConcurrentServer extends AbstractServer {
 
   protected abstract Thread createWorker(Socket client);
 
-
 }

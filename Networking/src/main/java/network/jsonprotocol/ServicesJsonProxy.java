@@ -5,8 +5,8 @@ import com.google.gson.reflect.TypeToken;
 import model.Participant;
 import model.Race;
 import model.Registration;
-import network.dto.RaceCountDTO;
-import network.dto.RegistrationDTO;
+import network.dto.*;
+import network.types.ResponseType;
 import services.IObserver;
 import services.IServices;
 import services.ServiceException;
@@ -14,6 +14,7 @@ import services.ServiceException;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -23,18 +24,19 @@ import java.util.stream.Collectors;
 public class ServicesJsonProxy implements IServices {
     private final String host;
     private final int port;
+    private final Gson gson;
 
     private IObserver client;
 
     private BufferedReader input;
     private PrintWriter output;
-    private Gson gsonFormatter;
     private Socket connection;
 
     private final BlockingQueue<JsonResponse> responses;
     private volatile boolean finished;
 
     public ServicesJsonProxy(String host, int port) {
+        gson = new Gson();
         this.host = host;
         this.port = port;
         responses = new LinkedBlockingQueue<>();
@@ -43,13 +45,13 @@ public class ServicesJsonProxy implements IServices {
     @Override
     public void login(String clientId, IObserver client) throws ServiceException {
         initializeConnection();
-        JsonRequest req = new JsonRequest("LOGIN", clientId);
+
+        JsonRequest req = JsonProtocolUtils.createLoginRequest(clientId);
         sendRequest(req);
 
         JsonResponse response = readResponse();
         if ("OK".equals(response.getStatus())) {
             this.client = client;
-            return;
         }else {
             closeConnection();
             throw new ServiceException(response.getData());
@@ -58,88 +60,123 @@ public class ServicesJsonProxy implements IServices {
 
     @Override
     public void logout(String clientId, IObserver clientObserver) throws ServiceException {
-        JsonRequest request = new JsonRequest("LOGOUT", clientId);
+
+        JsonRequest request = JsonProtocolUtils.createLogoutRequest(clientId);
         sendRequest(request);
+
         JsonResponse response = readResponse();
+
         closeConnection();
         if (!"OK".equals(response.getStatus())) {
             throw new ServiceException(response.getData());
         }
     }
 
-
     @Override
-    public Map<Race, Integer> getAllRacesWithParticipantCount() throws ServiceException {
-        initializeConnection();
+    public void createRegistration(String name, int age, Integer raceId) throws ServiceException {
+        JsonRequest req = JsonProtocolUtils.createRegistrationRequest(new CreateRegistrationDTO(name,age,raceId));
+        sendRequest(req);
 
-        JsonRequest request = new JsonRequest("GET_ALL_RACES", null);
-        sendRequest(request);
+        JsonResponse response = readResponse();
+        System.out.println("createRegistration " + response);
+
+    }
+
+    public List<Race> getRaces() throws ServiceException {
+        JsonRequest req = JsonProtocolUtils.createGetRacesRequest();
+        sendRequest(req);
 
         JsonResponse response = readResponse();
 
         if (!"OK".equals(response.getStatus())) {
-            throw new RuntimeException(response.getData()); // handle error
+            throw new ServiceException("Failed to fetch races: " + response.getData());
         }
 
-        Type listType = new TypeToken<List<RaceCountDTO>>() {}.getType();
-        List<RaceCountDTO> raceCountDTOList = new Gson().fromJson(response.getData(), listType);
+        Type listDtoType = new TypeToken<ListDTO<RaceDTO>>() {}.getType();
+        ListDTO<RaceDTO> listDTO = gson.fromJson(response.getData(), listDtoType);
 
-        Map<Race, Integer> result = raceCountDTOList.stream()
-                .collect(Collectors.toMap(RaceCountDTO::getRace, RaceCountDTO::getCount));
+        ArrayList<Race> races = listDTO.getItems().stream()
+                .map(raceDTO -> new Race(raceDTO.getId(), raceDTO.getDistance(), raceDTO.getStyle(), raceDTO.getNumberOfParticipants()))
+                .collect(Collectors.toCollection(ArrayList::new));
 
-        return result;
+        return races;
+    }
+
+    public List<Participant> getParticipants() throws ServiceException {
+        JsonRequest req = JsonProtocolUtils.createGetParticipantsRequest();
+        sendRequest(req);
+
+        JsonResponse response = readResponse();
+
+        if (!"OK".equals(response.getStatus())) {
+            throw new ServiceException("Failed to fetch participants: " + response.getData());
+        }
+
+        Type listDtoType = new TypeToken<ListDTO<ParticipantDTO>>() {}.getType();
+        ListDTO<ParticipantDTO> listDTO = gson.fromJson(response.getData(), listDtoType);
+
+        ArrayList<Participant> participants = listDTO.getItems().stream()
+                .map(participantDTO -> new Participant(participantDTO.getId(), participantDTO.getName(), participantDTO.getAge()))  // Assuming ParticipantDTO has these fields
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        return participants;
+    }
+
+    public List<Registration> getRegistrations() throws ServiceException {
+        JsonRequest req = JsonProtocolUtils.createGetRegistrationsRequest();
+        sendRequest(req);
+
+        JsonResponse response = readResponse();
+
+        if (!"OK".equals(response.getStatus())) {
+            throw new ServiceException("Failed to fetch registrations: " + response.getData());
+        }
+
+        Type listDtoType = new TypeToken<ListDTO<RegistrationDTO>>() {}.getType();
+        ListDTO<RegistrationDTO> listDTO = gson.fromJson(response.getData(), listDtoType);
+
+        ArrayList<Registration> registrations = listDTO.getItems().stream()
+                .map(registrationDTO -> new Registration(registrationDTO.getId(), registrationDTO.getParticipantId(), registrationDTO.getRaceId()))  // Assuming RegistrationDTO has these fields
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        return registrations;
+    }
+
+    @Override
+    public Map<Race, Integer> getAllRacesWithParticipantCount() throws ServiceException {
+        return null;
+
     }
 
     @Override
     public List<Participant> getAllParticipantsFromSpecificRace(Race race) throws ServiceException {
-        initializeConnection();
-
-        Gson gson = new Gson();
-        String raceJson = gson.toJson(race);
-
-        JsonRequest request = new JsonRequest("GET_PARTICIPANTS_FOR_RACE", raceJson);
-        sendRequest(request);
-
-        JsonResponse response = readResponse();
-        closeConnection();
-
-        if (!"OK".equals(response.getStatus())) {
-            throw new RuntimeException(response.getData());
-        }
-
-        Type listType = new TypeToken<List<Participant>>() {}.getType();
-        return gson.fromJson(response.getData(), listType);
+        return null;
     }
 
 
-    @Override
-    public void createRegistration(String name, int age, Integer raceId) throws ServiceException {
-        initializeConnection();
 
-        RegistrationDTO registration = new RegistrationDTO(name, age, raceId);
-
-        JsonRequest request = JsonProtocolUtils.createRegistrationRequest(registration);
-        sendRequest(request);
-
-        JsonResponse response = readResponse();
-        closeConnection();
-
-        if (!"OK".equals(response.getStatus())) {
-            throw new ServiceException(response.getData());
-        }
-
-        JsonResponse newRegistrationResponse = new JsonResponse("OK", gsonFormatter.toJson(registration), "NEW_REGISTRATION");
-        try {
-            responses.put(newRegistrationResponse); // Notify all connected clients about the new registration
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+    private void handleUpdate(JsonResponse response) {
+        String registrationData = response.getData();
+        if (client != null) {
+            client.update();
         }
     }
 
-
-    public void initializeConnection() throws ServiceException {
+    private void sendRequest(JsonRequest request) throws ServiceException {
+        String reqJson = gson.toJson(request);
         try {
-            gsonFormatter = new Gson();
+            output.println(reqJson);
+            output.flush();
+        } catch (Exception e) {
+            throw new ServiceException("Failed to send request: " + e.getMessage());
+        }
+    }
+
+    private void initializeConnection() throws ServiceException {
+        if (connection != null && !connection.isClosed()) {
+            return; // connection already open, reuse it!
+        }
+        try {
             connection = new Socket(host, port);
             output = new PrintWriter(connection.getOutputStream(), true);
             input = new BufferedReader(new InputStreamReader(connection.getInputStream()));
@@ -150,15 +187,6 @@ public class ServicesJsonProxy implements IServices {
         }
     }
 
-    private void sendRequest(JsonRequest request) throws ServiceException {
-        String reqJson = gsonFormatter.toJson(request);
-        try {
-            output.println(reqJson);
-            output.flush();
-        } catch (Exception e) {
-            throw new ServiceException("Failed to send request: " + e.getMessage());
-        }
-    }
 
     private JsonResponse readResponse() throws ServiceException {
         try {
@@ -184,40 +212,20 @@ public class ServicesJsonProxy implements IServices {
         tw.start();
     }
 
-
-    private void handleNewRegistration(JsonResponse response) {
-        String registrationData = response.getData();
-        Registration newRegistration = gsonFormatter.fromJson(registrationData, Registration.class);
-
-        // Notify the client observer about the new registration
-        if (client != null) {
-            try {
-                client.createdRegistration(newRegistration);
-            } catch (ServiceException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-    }
-
-    private boolean isNewRegistration(String data) {
-        return data != null && data.contains("NEW_REGISTRATION");
-    }
-
     private class ReaderThread implements Runnable {
         public void run() {
             while (!finished) {
                 try {
                     String responseLine = input.readLine();
+                    JsonResponse response = gson.fromJson(responseLine, JsonResponse.class);
 
-                    // TODO remove after fix
-                    //System.out.println("Response received: " + responseLine);
 
-                    JsonResponse response = gsonFormatter.fromJson(responseLine, JsonResponse.class);
+                    if (ResponseType.UPDATE_RESPONSE.equals(response.getType())) {
+                        handleUpdate(response);
+                    }
 
-                    if ("NEW_REGISTRATION".equals(response.getType())) {
-                        handleNewRegistration(response);
-                    } else {
+
+                    else {
                         try {
                             responses.put(response);
                         } catch (InterruptedException e) {

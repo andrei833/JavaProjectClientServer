@@ -42,8 +42,6 @@ public class StartJsonClient2 {
 
         try {
             String randomString = String.valueOf((int) (Math.random() * 100000) % 100000);
-            ((ServicesJsonProxy) server).initializeConnection();
-
             IObserver observer = new ClientObserver();
             server.login(randomString, observer);
 

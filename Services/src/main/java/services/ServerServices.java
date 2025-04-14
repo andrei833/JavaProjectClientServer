@@ -13,13 +13,13 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class Services implements IServices {
+public class ServerServices implements IServices {
     private final IRepo<Integer, Race> raceRepo;
     private final IRepo<Integer, Participant> participantRepo;
     private final IRepo<Integer, Registration> registrationRepo;
     private final Map<String, IObserver> loggedClients;
 
-    public Services(
+    public ServerServices(
             RaceRepository raceRepo,
             ParticipantRepository participantRepo,
             RegistrationRepository registrationRepo
@@ -30,7 +30,7 @@ public class Services implements IServices {
         loggedClients = new ConcurrentHashMap<>();
     }
 
-    public Services() {
+    public ServerServices() {
         this.raceRepo = new RaceRepository();
         this.participantRepo = new ParticipantRepository();
         this.registrationRepo = new RegistrationRepository();
@@ -38,27 +38,34 @@ public class Services implements IServices {
     }
 
     @Override
-    public synchronized void login(String clientId, IObserver clientObserver) throws ServiceException {
+    public synchronized void login(String clientId, IObserver workerRefference) throws ServiceException {
         if (loggedClients.containsKey(clientId)) {
             throw new ServiceException("Client already logged in.");
         }
-
-        loggedClients.put(clientId, clientObserver);
-        System.out.println("Client " + clientId + " logged in.");
-
+        loggedClients.put(clientId, workerRefference);
     }
 
     @Override
-    public synchronized void logout(String clientId, IObserver clientObserver) throws ServiceException {
+    public synchronized void logout(String clientId, IObserver workerRefference) throws ServiceException {
         // Check if the client is logged in
         IObserver removed = loggedClients.remove(clientId);
         if (removed == null) {
             throw new ServiceException("Client not logged in.");
         }
         System.out.println("Client " + clientId + " logged out.");
-
     }
 
+    public List<Race> getRaces() {
+        return new ArrayList<>(raceRepo.getAll());
+    }
+
+    public List<Participant> getParticipants() {
+        return new ArrayList<>(participantRepo.getAll());
+    }
+
+    public List<Registration> getRegistrations() {
+        return new ArrayList<>(registrationRepo.getAll());
+    }
 
     @Override
     public void createRegistration(String participantName, int participantAge, Integer raceID) throws ServiceException {
@@ -91,6 +98,12 @@ public class Services implements IServices {
             Registration newRegistration = new Registration(newRegistrationId, participantId, raceID);
             registrationRepo.add(newRegistration);
         }
+
+
+        for (IObserver observer : loggedClients.values()) {
+            observer.update();
+        }
+
     }
 
     @Override

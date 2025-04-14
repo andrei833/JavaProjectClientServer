@@ -42,11 +42,9 @@ public class StartJsonClient {
 
         try {
             String randomString = String.valueOf((int) (Math.random() * 100000) % 100000);
-            ((ServicesJsonProxy) server).initializeConnection();
-
             IObserver observer = new ClientObserver();
             server.login(randomString, observer);
-            server.createRegistration("Jane Doe", 30, 1);
+            System.out.println(server.getRegistrations());
 
 
         } catch (ServiceException e) {

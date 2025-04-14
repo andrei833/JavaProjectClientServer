@@ -4,7 +4,7 @@ import repository.ParticipantRepository;
 import repository.RaceRepository;
 import repository.RegistrationRepository;
 import services.IServices;
-import services.Services;
+import services.ServerServices;
 
 import java.rmi.ServerException;
 import java.util.Properties;
@@ -26,7 +26,7 @@ public class StartJsonServer {
         ParticipantRepository participantRepo = new ParticipantRepository();
         RaceRepository raceRepo = new RaceRepository();
 
-        IServices service = new Services(raceRepo,participantRepo,registrationRepo);
+        IServices service = new ServerServices(raceRepo,participantRepo,registrationRepo);
 
         int chatServerPort = defaultPort;
         try {
