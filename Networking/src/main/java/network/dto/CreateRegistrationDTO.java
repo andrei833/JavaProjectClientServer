@@ -3,16 +3,16 @@ package network.dto;
 public class CreateRegistrationDTO {
     private String participantName;
     private int participantAge;
-    private Integer registrationId;
+    private Integer raceId;
 
 
     public CreateRegistrationDTO() {
     }
 
-    public CreateRegistrationDTO(String participantName, int participantAge, Integer registrationId) {
+    public CreateRegistrationDTO(String participantName, int participantAge, Integer raceId) {
         this.participantName = participantName;
         this.participantAge = participantAge;
-        this.registrationId = registrationId;
+        this.raceId = raceId;
     }
 
     public String getParticipantName() {
@@ -31,11 +31,21 @@ public class CreateRegistrationDTO {
         this.participantAge = participantAge;
     }
 
-    public Integer getRegistrationId() {
-        return registrationId;
+    public Integer getRaceId() {
+        return raceId;
     }
 
-    public void setRegistrationId(Integer registrationId) {
-        this.registrationId = registrationId;
+    public void setRaceId(Integer registrationId) {
+        this.raceId = registrationId;
     }
+
+    @Override
+    public String toString() {
+        return "CreateRegistrationDTO{" +
+                "participantName='" + participantName + '\'' +
+                ", participantAge=" + participantAge +
+                ", raceId=" + raceId +
+                '}';
+    }
+
 }

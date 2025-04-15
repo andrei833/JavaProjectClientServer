@@ -36,6 +36,7 @@ public class ClientJsonWorker implements Runnable, IObserver {
 
   private JsonResponse handleRequest(JsonRequest request) {
     try {
+      System.out.println("Client ID: " + request.toString());
       switch (request.getType()) {
         case LOGIN:
           String clientId = gson.fromJson(request.getData(), String.class);
@@ -49,7 +50,9 @@ public class ClientJsonWorker implements Runnable, IObserver {
 
         case CREATE_REGISTRATION:
           CreateRegistrationDTO regDto = gson.fromJson(request.getData(), CreateRegistrationDTO.class);
-          server.createRegistration(regDto.getParticipantName(),regDto.getParticipantAge(),regDto.getRegistrationId());
+          //TODO PROBLEM SHOULD BE RACE ID NOT REGISTRATION ID
+          System.out.println(regDto);
+          server.createRegistration(regDto.getParticipantName(),regDto.getParticipantAge(),regDto.getRaceId());
           return JsonProtocolUtils.createCreateRegistrationResponse("OK","Registration Created Succesfully not checking if the user is in the race already");
 
         case GET_RACES:
